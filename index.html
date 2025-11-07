@@ -37,34 +37,75 @@
 
     document.getElementById('startBtn').onclick = init;
 
+    function waitForIceGatheringComplete(pc) {
+      return new Promise(resolve => {
+        if (pc.iceGatheringState === 'complete') return resolve();
+        function check() {
+          if (pc.iceGatheringState === 'complete') {
+            pc.removeEventListener('icegatheringstatechange', check);
+            resolve();
+          }
+        }
+        pc.addEventListener('icegatheringstatechange', check);
+      });
+    }
+
     document.getElementById('createOfferBtn').onclick = async () => {
-      pc = new RTCPeerConnection();
+      if (!localStream) { alert('Click "Start Local Mic" first'); return; }
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] // add TURN for production
+      });
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
       pc.ontrack = (event) => {
         document.getElementById('remoteAudio').srcObject = event.streams[0];
       };
+      pc.onicecandidate = () => { /* optional: can log candidates here */ };
+
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      document.getElementById('offer').value = JSON.stringify(offer);
+
+      // wait for ICE gathering to finish so SDP contains candidates
+      await waitForIceGatheringComplete(pc);
+      document.getElementById('offer').value = JSON.stringify(pc.localDescription);
     };
 
     document.getElementById('createAnswerBtn').onclick = async () => {
-      pc = new RTCPeerConnection();
+      if (!localStream) { alert('Click "Start Local Mic" first'); return; }
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
       pc.ontrack = (event) => {
         document.getElementById('remoteAudio').srcObject = event.streams[0];
       };
-      const offer = JSON.parse(document.getElementById('offer').value);
-      await pc.setRemoteDescription(offer);
+
+      let offerObj;
+      try {
+        offerObj = JSON.parse(document.getElementById('offer').value);
+      } catch (e) {
+        alert('Invalid offer JSON');
+        return;
+      }
+
+      await pc.setRemoteDescription(offerObj);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      document.getElementById('answer').value = JSON.stringify(answer);
+
+      await waitForIceGatheringComplete(pc);
+      document.getElementById('answer').value = JSON.stringify(pc.localDescription);
     };
 
     document.getElementById('setAnswerBtn').onclick = async () => {
-      const answer = JSON.parse(document.getElementById('answer').value);
-      await pc.setRemoteDescription(answer);
-      alert("Connected! You should hear audio now.");
+      if (!pc) { alert('No RTCPeerConnection exists. Create offer/answer first.'); return; }
+      let answerObj;
+      try {
+        answerObj = JSON.parse(document.getElementById('answer').value);
+      } catch (e) {
+        alert('Invalid answer JSON');
+        return;
+      }
+      await pc.setRemoteDescription(answerObj);
+      alert("Connected! You should hear audio now (if NAT/ICE allows).");
     };
   </script>
 </body>
