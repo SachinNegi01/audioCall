@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Simple Audio Call (WebRTC, Pure JS)</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    textarea { width: 100%; height: 100px; }
+    button { margin: 6px 0; }
+    audio { display: block; margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <h2>Simple Audio Call - No Backend</h2>
+
+  <button id="startBtn">Start Local Mic</button>
+  <button id="createOfferBtn">Create Offer</button>
+  <button id="createAnswerBtn">Create Answer</button>
+  <button id="setAnswerBtn">Set Remote Answer</button>
+
+  <h3>Offer (copy & send to friend):</h3>
+  <textarea id="offer"></textarea>
+
+  <h3>Answer (paste from friend):</h3>
+  <textarea id="answer"></textarea>
+
+  <audio id="remoteAudio" controls autoplay></audio>
+
+  <script>
+    let pc;
+    let localStream;
+
+    async function init() {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      alert("Microphone ready!");
+    }
+
+    document.getElementById('startBtn').onclick = init;
+
+    document.getElementById('createOfferBtn').onclick = async () => {
+      pc = new RTCPeerConnection();
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      pc.ontrack = (event) => {
+        document.getElementById('remoteAudio').srcObject = event.streams[0];
+      };
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      document.getElementById('offer').value = JSON.stringify(offer);
+    };
+
+    document.getElementById('createAnswerBtn').onclick = async () => {
+      pc = new RTCPeerConnection();
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      pc.ontrack = (event) => {
+        document.getElementById('remoteAudio').srcObject = event.streams[0];
+      };
+      const offer = JSON.parse(document.getElementById('offer').value);
+      await pc.setRemoteDescription(offer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      document.getElementById('answer').value = JSON.stringify(answer);
+    };
+
+    document.getElementById('setAnswerBtn').onclick = async () => {
+      const answer = JSON.parse(document.getElementById('answer').value);
+      await pc.setRemoteDescription(answer);
+      alert("Connected! You should hear audio now.");
+    };
+  </script>
+</body>
+</html>
